@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react';
 import { Message, ChatState } from '@/types/chat';
 
 const GEMINI_API_KEY = 'AIzaSyC6sD6gOx-BSl8l8JB6B2RcSniMeCPEXYU';
-const GEMINI_API_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent';
+const GEMINI_API_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
 
 export const useWeatherChat = () => {
   const [chatState, setChatState] = useState<ChatState>({
