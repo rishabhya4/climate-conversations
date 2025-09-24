@@ -45,8 +45,8 @@ export const ChatInput = ({ onSendMessage, isLoading, placeholder = "Ask about t
   };
 
   return (
-    <div className="p-4 bg-card border-t border-border shadow-header">
-      <div className="flex items-end space-x-3 max-w-4xl mx-auto">
+    <div className="p-3 sm:p-4 bg-card border-t border-border shadow-header sticky bottom-0 z-40 [padding-bottom:calc(env(safe-area-inset-bottom,0)+12px)]">
+      <div className="flex items-end space-x-2 sm:space-x-3 max-w-4xl mx-auto">
         <div className="flex-1 relative">
           <Textarea
             ref={textareaRef}
@@ -56,7 +56,7 @@ export const ChatInput = ({ onSendMessage, isLoading, placeholder = "Ask about t
             placeholder={placeholder}
             disabled={isLoading}
             className={cn(
-              "min-h-[44px] max-h-[150px] resize-none rounded-lg",
+              "min-h-[44px] max-h-[150px] resize-none rounded-lg pr-10",
               "border-input bg-background shadow-input",
               "focus:border-input-focus focus:ring-1 focus:ring-input-focus",
               "placeholder:text-muted-foreground",
@@ -94,7 +94,7 @@ export const ChatInput = ({ onSendMessage, isLoading, placeholder = "Ask about t
       </div>
       
       {/* Hint text */}
-      <div className="text-xs text-muted-foreground text-center mt-2">
+      <div className="text-[11px] sm:text-xs text-muted-foreground text-center mt-2">
         Press Enter to send • Shift + Enter for new line
       </div>
     </div>

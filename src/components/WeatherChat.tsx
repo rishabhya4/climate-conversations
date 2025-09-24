@@ -8,11 +8,14 @@ import { ChatInput } from './ChatInput';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Cloud, Trash2, AlertCircle, Sun, Moon, RefreshCw, History as HistoryIcon, Download, Trash } from 'lucide-react';
+import { Cloud, Trash2, AlertCircle, Sun, Moon, RefreshCw, History as HistoryIcon, Download, Trash, ArrowLeft } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 export const WeatherChat = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
   const defaultThread = (import.meta as any).env?.VITE_THREAD_ID || 2;
   const [threadId, setThreadId] = useState<string | number>(defaultThread);
   const [isDark, setIsDark] = useState<boolean>(() => {
@@ -127,23 +130,52 @@ export const WeatherChat = () => {
 
   const hasMessages = messages.length > 0;
 
+  const handleBack = () => {
+    try {
+      if (window.history.length > 1) {
+        navigate(-1);
+        return;
+      }
+    } catch {}
+
+    if (location.pathname !== '/') {
+      navigate('/');
+      return;
+    }
+
+    if (hasMessages) {
+      clearChat();
+    }
+  };
+
   return (
-    <div className="flex flex-col h-screen bg-gradient-bg">
+    <div className="flex flex-col min-h-dvh bg-gradient-bg">
       {/* Header */}
-      <header className="bg-chat-header border-b border-border shadow-header">
-        <div className="max-w-4xl mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
+      <header className="bg-chat-header border-b border-border shadow-header sticky top-0 z-40 pt-[calc(env(safe-area-inset-top,0))]">
+        <div className="max-w-4xl mx-auto px-4 pt-3 pb-3 sm:py-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div className="flex items-center space-x-3">
+              {hasMessages && (
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={handleBack}
+                  className="shrink-0"
+                  aria-label="Back"
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                </Button>
+              )}
               <div className="flex items-center justify-center w-10 h-10 bg-gradient-sky rounded-full text-white shadow-lg">
                 <Cloud className="w-5 h-5" />
               </div>
               <div>
                 <h1 className="text-xl font-semibold text-foreground">Weather Agent</h1>
-                <p className="text-sm text-muted-foreground">Ask me about weather anywhere in the world</p>
+                <p className="text-sm text-muted-foreground hidden sm:block">Ask me about weather anywhere in the world</p>
               </div>
             </div>
             
-            <div className="flex items-center space-x-2">
+            <div className="flex flex-wrap items-center gap-2">
               <div className="hidden md:flex items-center space-x-2">
                 <Input
                   value={threadId}
@@ -200,7 +232,7 @@ export const WeatherChat = () => {
                 variant="outline"
                 size="sm"
                 onClick={handleExport}
-                className="text-muted-foreground hover:text-foreground"
+                className="text-muted-foreground hover:text-foreground hidden md:flex"
               >
                 Export
               </Button>
@@ -209,7 +241,7 @@ export const WeatherChat = () => {
                 size="sm"
                 onClick={handleResendLast}
                 disabled={isLoading || !messages.some(m => m.role === 'user')}
-                className="text-muted-foreground hover:text-foreground"
+                className="text-muted-foreground hover:text-foreground hidden sm:flex"
               >
                 <RefreshCw className="w-4 h-4 mr-2" />
                 Re-send
@@ -228,7 +260,7 @@ export const WeatherChat = () => {
                   variant="outline"
                   size="sm"
                   onClick={clearChat}
-                  className="text-muted-foreground hover:text-foreground"
+                  className="text-muted-foreground hover:text-foreground hidden md:flex"
                 >
                   <Trash2 className="w-4 h-4 mr-2" />
                   Clear Chat
@@ -242,7 +274,7 @@ export const WeatherChat = () => {
       {/* Messages Container */}
       <main className="flex-1 overflow-hidden">
         <div className="h-full overflow-y-auto">
-          <div className="max-w-4xl mx-auto px-4 py-6">
+          <div className="max-w-4xl mx-auto px-4 py-6 pb-28">
             {/* Welcome message when no messages */}
             {!hasMessages && !isLoading && (
               <div className="flex flex-col items-center justify-center h-full text-center space-y-6 animate-fade-in">
