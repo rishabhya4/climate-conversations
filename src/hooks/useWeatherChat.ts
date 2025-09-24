@@ -1,8 +1,8 @@
 import { useState, useCallback } from 'react';
-import { Message, ChatApiRequest, ChatState } from '@/types/chat';
+import { Message, ChatState } from '@/types/chat';
 
-const API_ENDPOINT = 'https://millions-screeching-vultur.mastra.cloud/api/agents/weatherAgent/stream';
-const THREAD_ID = '2'; // Using provided thread ID
+const GEMINI_API_KEY = 'AIzaSyC6sD6gOx-BSl8l8JB6B2RcSniMeCPEXYU';
+const GEMINI_API_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent';
 
 export const useWeatherChat = () => {
   const [chatState, setChatState] = useState<ChatState>({
@@ -30,36 +30,32 @@ export const useWeatherChat = () => {
     }));
 
     try {
-      const requestBody: ChatApiRequest = {
-        messages: [
-          // Include conversation history
-          ...chatState.messages.map(msg => ({
-            role: msg.role === 'assistant' ? 'assistant' as const : 'user' as const,
-            content: msg.content,
-          })),
-          {
-            role: 'user',
-            content: content.trim(),
-          },
-        ],
-        runId: 'weatherAgent',
-        maxRetries: 2,
-        maxSteps: 5,
-        temperature: 0.5,
-        topP: 1,
-        runtimeContext: {},
-        threadId: THREAD_ID,
-        resourceId: 'weatherAgent',
+      // Create weather-focused prompt
+      const weatherPrompt = `You are a helpful weather assistant. The user asked: "${content.trim()}"
+      
+      Please provide current weather information, forecasts, or weather-related assistance. Be conversational and helpful.
+      
+      Previous conversation context:
+      ${chatState.messages.map(msg => `${msg.role}: ${msg.content}`).join('\n')}`;
+
+      const requestBody = {
+        contents: [{
+          parts: [{
+            text: weatherPrompt
+          }]
+        }],
+        generationConfig: {
+          temperature: 0.7,
+          topK: 40,
+          topP: 0.95,
+          maxOutputTokens: 1024,
+        }
       };
 
-      const response = await fetch(API_ENDPOINT, {
+      const response = await fetch(`${GEMINI_API_ENDPOINT}?key=${GEMINI_API_KEY}`, {
         method: 'POST',
         headers: {
-          'Accept': '*/*',
-          'Accept-Language': 'en-GB,en-US;q=0.9,en;q=0.8,fr;q=0.7',
-          'Connection': 'keep-alive',
           'Content-Type': 'application/json',
-          'x-mastra-dev-playground': 'true',
         },
         body: JSON.stringify(requestBody),
       });
@@ -68,75 +64,23 @@ export const useWeatherChat = () => {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      const reader = response.body?.getReader();
-      if (!reader) {
-        throw new Error('No response body available');
-      }
+      const data = await response.json();
+      
+      const assistantContent = data.candidates?.[0]?.content?.parts?.[0]?.text || 
+        'I apologize, but I encountered an error while processing your request. Please try again.';
 
       const assistantMessage: Message = {
         id: `assistant-${Date.now()}`,
         role: 'assistant',
-        content: '',
+        content: assistantContent,
         timestamp: new Date(),
       };
 
-      // Add empty assistant message to show typing indicator
+      // Add assistant message
       setChatState(prev => ({
         ...prev,
         messages: [...prev.messages, assistantMessage],
-      }));
-
-      let fullContent = '';
-      const decoder = new TextDecoder();
-
-      try {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          const chunk = decoder.decode(value, { stream: true });
-          const lines = chunk.split('\n');
-
-          for (const line of lines) {
-            if (line.startsWith('data: ')) {
-              const data = line.slice(6);
-              if (data === '[DONE]') continue;
-
-              try {
-                const parsed = JSON.parse(data);
-                if (parsed.content) {
-                  fullContent += parsed.content;
-                  
-                  // Update the assistant message with accumulated content
-                  setChatState(prev => ({
-                    ...prev,
-                    messages: prev.messages.map(msg =>
-                      msg.id === assistantMessage.id
-                        ? { ...msg, content: fullContent }
-                        : msg
-                    ),
-                  }));
-                }
-              } catch (parseError) {
-                // Ignore JSON parse errors for partial chunks
-                console.warn('Failed to parse chunk:', data);
-              }
-            }
-          }
-        }
-      } finally {
-        reader.releaseLock();
-      }
-
-      // Finalize the message
-      setChatState(prev => ({
-        ...prev,
         isLoading: false,
-        messages: prev.messages.map(msg =>
-          msg.id === assistantMessage.id
-            ? { ...msg, content: fullContent || 'I apologize, but I encountered an error while processing your request. Please try again.' }
-            : msg
-        ),
       }));
 
     } catch (error) {
@@ -146,7 +90,7 @@ export const useWeatherChat = () => {
         ...prev,
         isLoading: false,
         error: error instanceof Error ? error.message : 'An unexpected error occurred',
-        messages: prev.messages.filter(msg => msg.id !== `user-${Date.now()}`), // Remove user message on error
+        messages: prev.messages.slice(0, -1), // Remove user message on error
       }));
     }
   }, [chatState.messages, chatState.isLoading]);
