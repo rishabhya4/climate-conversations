@@ -1,3 +1,5 @@
+// NotFound.tsx
+// Catch-all route for unknown paths.
 import { useLocation } from "react-router-dom";
 import { useEffect } from "react";
 

@@ -1,3 +1,5 @@
+// ChatInput.tsx
+// Textarea + send button with Enter-to-send and auto-resize.
 import { useState, useRef, KeyboardEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';

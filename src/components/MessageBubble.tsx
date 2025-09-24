@@ -1,3 +1,5 @@
+// MessageBubble.tsx
+// Renders an individual message with role-based styling and timestamp.
 import { Message } from '@/types/chat';
 import { cn } from '@/lib/utils';
 import { Cloud, User, Bot } from 'lucide-react';

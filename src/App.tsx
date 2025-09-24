@@ -1,3 +1,6 @@
+// App.tsx
+// Root application component: sets up providers (React Query, Tooltip/Toasters)
+// and defines client-side routes for the Weather Agent app.
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";

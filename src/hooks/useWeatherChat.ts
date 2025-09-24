@@ -1,15 +1,46 @@
-import { useState, useCallback } from 'react';
+// useWeatherChat.ts
+// Custom hook managing chat state, streaming API integration, per-thread
+// persistence, and error/loading handling for the Weather Agent.
+import { useState, useCallback, useEffect } from 'react';
 import { Message, ChatState } from '@/types/chat';
 
-const GEMINI_API_KEY = 'AIzaSyC6sD6gOx-BSl8l8JB6B2RcSniMeCPEXYU';
-const GEMINI_API_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
+const getDefaultThreadId = (): number | string => {
+  const threadIdEnv = (import.meta as any).env?.VITE_THREAD_ID;
+  return threadIdEnv && threadIdEnv.toString().trim().length > 0 ? threadIdEnv : 2;
+};
 
-export const useWeatherChat = () => {
+export const useWeatherChat = (threadIdParam?: number | string) => {
   const [chatState, setChatState] = useState<ChatState>({
     messages: [],
     isLoading: false,
     error: null,
   });
+  const threadId = threadIdParam ?? getDefaultThreadId();
+
+  // Load messages for current thread from localStorage
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(`weather-chat:${threadId}`);
+      if (raw) {
+        const parsed = JSON.parse(raw) as any[];
+        const revived: Message[] = parsed.map((m) => ({ ...m, timestamp: new Date(m.timestamp) }));
+        setChatState((prev) => ({ ...prev, messages: revived }));
+      } else {
+        setChatState((prev) => ({ ...prev, messages: [] }));
+      }
+    } catch {
+      // ignore
+    }
+  }, [threadId]);
+
+  // Persist messages per thread to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem(`weather-chat:${threadId}`, JSON.stringify(chatState.messages));
+    } catch {
+      // ignore
+    }
+  }, [chatState.messages, threadId]);
 
   const sendMessage = useCallback(async (content: string) => {
     if (!content.trim() || chatState.isLoading) return;
@@ -30,56 +61,136 @@ export const useWeatherChat = () => {
     }));
 
     try {
-      // Create weather-focused prompt
-      const weatherPrompt = `You are a helpful weather assistant. The user asked: "${content.trim()}"
-      
-      Please provide current weather information, forecasts, or weather-related assistance. Be conversational and helpful.
-      
-      Previous conversation context:
-      ${chatState.messages.map(msg => `${msg.role}: ${msg.content}`).join('\n')}`;
+      // Prepare streaming request to Mastra Weather Agent
+      const endpoint = 'https://millions-screeching-vultur.mastra.cloud/api/agents/weatherAgent/stream';
+
+      // use current threadId
+
+      const messagesPayload = [...chatState.messages, userMessage].map(m => ({
+        role: m.role,
+        content: m.content,
+      }));
 
       const requestBody = {
-        contents: [{
-          parts: [{
-            text: weatherPrompt
-          }]
-        }],
-        generationConfig: {
-          temperature: 0.7,
-          topK: 40,
-          topP: 0.95,
-          maxOutputTokens: 1024,
-        }
-      };
+        messages: messagesPayload,
+        runId: 'weatherAgent',
+        maxRetries: 2,
+        maxSteps: 5,
+        temperature: 0.5,
+        topP: 1,
+        runtimeContext: {},
+        threadId,
+        resourceId: 'weatherAgent',
+      } as const;
 
-      const response = await fetch(`${GEMINI_API_ENDPOINT}?key=${GEMINI_API_KEY}`, {
+      // Insert a placeholder assistant message for streaming updates
+      const assistantMessageId = `assistant-${Date.now()}`;
+      setChatState(prev => ({
+        ...prev,
+        messages: [
+          ...prev.messages,
+          { id: assistantMessageId, role: 'assistant', content: '', timestamp: new Date() },
+        ],
+      }));
+
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: {
+          'Accept': '*/*',
+          'Accept-Language': 'en-GB,en-US;q=0.9,en;q=0.8,fr;q=0.7',
+          'Connection': 'keep-alive',
           'Content-Type': 'application/json',
+          'x-mastra-dev-playground': 'true',
         },
         body: JSON.stringify(requestBody),
       });
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+      if (!response.ok || !response.body) {
+        throw new Error(`Request failed: ${response.status} ${response.statusText}`);
       }
 
-      const data = await response.json();
-      
-      const assistantContent = data.candidates?.[0]?.content?.parts?.[0]?.text || 
-        'I apologize, but I encountered an error while processing your request. Please try again.';
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let done = false;
+      let bufferedText = '';
 
-      const assistantMessage: Message = {
-        id: `assistant-${Date.now()}`,
-        role: 'assistant',
-        content: assistantContent,
-        timestamp: new Date(),
-      };
+      while (!done) {
+        const result = await reader.read();
+        done = result.done === true;
+        const chunkText = decoder.decode(result.value || new Uint8Array(), { stream: !done });
+        if (!chunkText) continue;
 
-      // Add assistant message
+        bufferedText += chunkText;
+
+        // Try to parse line-by-line (supports SSE-like or NDJSON). Fallback: append raw text.
+        const lines = bufferedText.split(/\r?\n/);
+        // Keep the last partial line in buffer
+        bufferedText = lines.pop() || '';
+
+        let accumulatedAppend = '';
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed) continue;
+
+          // Handle "data: ..." prefix if present
+          const dataStr = trimmed.startsWith('data:') ? trimmed.slice(5).trim() : trimmed;
+          // Mastra stream format support: lines like `0:"Hello"`, and meta lines `f:{}`, `e:{}`, `d:{}`
+          // 1) Ignore meta lines starting with f:, e:, d:
+          if (/^[fed]\s*:/i.test(dataStr)) {
+            // Skip meta and end/diagnostic events
+            continue;
+          }
+
+          // 2) Token lines like `0:"I"` or `12:" weather"` → extract quoted payload
+          const indexTokenMatch = dataStr.match(/^\d+\s*:\s*("[\s\S]*")$/);
+          if (indexTokenMatch) {
+            const quoted = indexTokenMatch[1];
+            try {
+              const token = JSON.parse(quoted);
+              if (typeof token === 'string') {
+                accumulatedAppend += token;
+                continue;
+              }
+            } catch {
+              // fall through if malformed
+            }
+          }
+
+          try {
+            const json = JSON.parse(dataStr);
+            const token =
+              (typeof json === 'string' ? json : (
+                json?.delta ?? json?.content ?? json?.text ?? json?.message?.content
+              ));
+            if (typeof token === 'string') {
+              accumulatedAppend += token;
+            } else {
+              // If json has nested choices style
+              const fromChoices = json?.choices?.[0]?.delta?.content ?? json?.choices?.[0]?.delta?.text;
+              if (typeof fromChoices === 'string') {
+                accumulatedAppend += fromChoices;
+              }
+            }
+          } catch {
+            // Not JSON line, append as plain text
+            // For safety, ignore non-JSON non-token lines to avoid polluting chat
+            // If you wish to debug, you can log dataStr here
+          }
+        }
+
+        if (accumulatedAppend.length > 0) {
+          setChatState(prev => ({
+            ...prev,
+            messages: prev.messages.map(m =>
+              m.id === assistantMessageId ? { ...m, content: (m.content + accumulatedAppend) } : m
+            ),
+          }));
+        }
+      }
+
+      // Finalize loading state
       setChatState(prev => ({
         ...prev,
-        messages: [...prev.messages, assistantMessage],
         isLoading: false,
       }));
 
@@ -90,7 +201,8 @@ export const useWeatherChat = () => {
         ...prev,
         isLoading: false,
         error: error instanceof Error ? error.message : 'An unexpected error occurred',
-        messages: prev.messages.slice(0, -1), // Remove user message on error
+        // Remove the last two messages (assistant placeholder and user) if present
+        messages: prev.messages.slice(0, Math.max(0, prev.messages.length - 2)),
       }));
     }
   }, [chatState.messages, chatState.isLoading]);
@@ -101,7 +213,10 @@ export const useWeatherChat = () => {
       isLoading: false,
       error: null,
     });
-  }, []);
+    try {
+      localStorage.removeItem(`weather-chat:${threadId}`);
+    } catch {}
+  }, [threadId]);
 
   const dismissError = useCallback(() => {
     setChatState(prev => ({
@@ -117,5 +232,6 @@ export const useWeatherChat = () => {
     sendMessage,
     clearChat,
     dismissError,
+    threadId,
   };
 };

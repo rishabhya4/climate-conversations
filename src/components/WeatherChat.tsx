@@ -1,15 +1,124 @@
-import { useEffect, useRef } from 'react';
+// WeatherChat.tsx
+// High-level chat UI: header (thread, theme, history, export, re-send),
+// messages list, error banner, and input. Uses useWeatherChat hook.
+import { useEffect, useRef, useState } from 'react';
 import { useWeatherChat } from '@/hooks/useWeatherChat';
 import { MessageBubble } from './MessageBubble';
 import { ChatInput } from './ChatInput';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Cloud, Trash2, AlertCircle, RefreshCw } from 'lucide-react';
+import { Cloud, Trash2, AlertCircle, Sun, Moon, RefreshCw, History as HistoryIcon, Download, Trash } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 
 export const WeatherChat = () => {
-  const { messages, isLoading, error, sendMessage, clearChat, dismissError } = useWeatherChat();
+  const defaultThread = (import.meta as any).env?.VITE_THREAD_ID || 2;
+  const [threadId, setThreadId] = useState<string | number>(defaultThread);
+  const [isDark, setIsDark] = useState<boolean>(() => {
+    const stored = typeof window !== 'undefined' ? localStorage.getItem('theme') : null;
+    if (stored) return stored === 'dark';
+    return document.documentElement.classList.contains('dark');
+  });
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [historyItems, setHistoryItems] = useState<Array<{ threadId: string; lastAt?: Date; count: number }>>([]);
+
+  useEffect(() => {
+    if (isDark) {
+      document.documentElement.classList.add('dark');
+      localStorage.setItem('theme', 'dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+      localStorage.setItem('theme', 'light');
+    }
+  }, [isDark]);
+
+  const { messages, isLoading, error, sendMessage, clearChat, dismissError } = useWeatherChat(threadId);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const handleExport = () => {
+    try {
+      const data = {
+        threadId,
+        exportedAt: new Date().toISOString(),
+        messages: messages.map(m => ({
+          id: m.id,
+          role: m.role,
+          content: m.content,
+          timestamp: m.timestamp.toISOString(),
+        })),
+      };
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `weather-chat-thread-${threadId}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch {}
+  };
+
+  const exportThread = (tid: string | number) => {
+    try {
+      const raw = localStorage.getItem(`weather-chat:${tid}`);
+      const parsed = raw ? JSON.parse(raw) : [];
+      const data = {
+        threadId: tid,
+        exportedAt: new Date().toISOString(),
+        messages: (parsed || []).map((m: any) => ({
+          id: m.id,
+          role: m.role,
+          content: m.content,
+          timestamp: m.timestamp,
+        })),
+      };
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `weather-chat-thread-${tid}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch {}
+  };
+
+  const refreshHistory = () => {
+    try {
+      const items: Array<{ threadId: string; lastAt?: Date; count: number }> = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i) || '';
+        if (!key.startsWith('weather-chat:')) continue;
+        const tid = key.replace('weather-chat:', '');
+        const raw = localStorage.getItem(key);
+        if (!raw) continue;
+        try {
+          const arr = JSON.parse(raw) as Array<{ timestamp: string }>;
+          const count = Array.isArray(arr) ? arr.length : 0;
+          const lastStr = count > 0 ? arr[count - 1].timestamp : undefined;
+          const lastAt = lastStr ? new Date(lastStr) : undefined;
+          items.push({ threadId: tid, lastAt, count });
+        } catch {}
+      }
+      items.sort((a, b) => {
+        const at = a.lastAt ? a.lastAt.getTime() : 0;
+        const bt = b.lastAt ? b.lastAt.getTime() : 0;
+        return bt - at;
+      });
+      setHistoryItems(items);
+    } catch {}
+  };
+
+  const handleResendLast = () => {
+    if (isLoading) return;
+    const lastUser = [...messages].reverse().find(m => m.role === 'user');
+    if (lastUser && lastUser.content.trim()) {
+      sendMessage(lastUser.content.trim());
+    }
+  };
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -34,17 +143,98 @@ export const WeatherChat = () => {
               </div>
             </div>
             
-            {hasMessages && (
+            <div className="flex items-center space-x-2">
+              <div className="hidden md:flex items-center space-x-2">
+                <Input
+                  value={threadId}
+                  onChange={(e) => setThreadId(e.target.value)}
+                  placeholder="Thread ID"
+                  className="h-9 w-40"
+                />
+              </div>
+              <Sheet open={historyOpen} onOpenChange={(o) => { setHistoryOpen(o); if (o) refreshHistory(); }}>
+                <SheetTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="text-muted-foreground hover:text-foreground"
+                  >
+                    <HistoryIcon className="w-4 h-4 mr-2" />
+                    History
+                  </Button>
+                </SheetTrigger>
+                <SheetContent side="right" className="w-[360px] sm:w-[400px]">
+                  <SheetHeader>
+                    <SheetTitle>Chat History</SheetTitle>
+                  </SheetHeader>
+                  <div className="mt-4 space-y-2">
+                    {historyItems.length === 0 ? (
+                      <div className="text-sm text-muted-foreground">No saved threads yet.</div>
+                    ) : (
+                      historyItems.map((item) => (
+                        <div key={item.threadId} className="flex items-center justify-between border rounded-md px-3 py-2">
+                          <div className="min-w-0">
+                            <div className="text-sm font-medium truncate">Thread {item.threadId}</div>
+                            <div className="text-xs text-muted-foreground">
+                              {item.count} messages{item.lastAt ? ` • ${item.lastAt.toLocaleString()}` : ''}
+                            </div>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <Button variant="outline" size="sm" onClick={() => { setThreadId(item.threadId); setHistoryOpen(false); }}>
+                              Open
+                            </Button>
+                            <Button variant="outline" size="icon" onClick={() => exportThread(item.threadId)} aria-label="Export thread">
+                              <Download className="w-4 h-4" />
+                            </Button>
+                            <Button variant="destructive" size="icon" onClick={() => { localStorage.removeItem(`weather-chat:${item.threadId}`); refreshHistory(); }} aria-label="Delete thread">
+                              <Trash className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </SheetContent>
+              </Sheet>
               <Button
                 variant="outline"
                 size="sm"
-                onClick={clearChat}
+                onClick={handleExport}
                 className="text-muted-foreground hover:text-foreground"
               >
-                <Trash2 className="w-4 h-4 mr-2" />
-                Clear Chat
+                Export
               </Button>
-            )}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleResendLast}
+                disabled={isLoading || !messages.some(m => m.role === 'user')}
+                className="text-muted-foreground hover:text-foreground"
+              >
+                <RefreshCw className="w-4 h-4 mr-2" />
+                Re-send
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setIsDark((v) => !v)}
+                className="text-muted-foreground hover:text-foreground"
+                aria-label="Toggle theme"
+              >
+                {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+              </Button>
+              {hasMessages && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={clearChat}
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Clear Chat
+                </Button>
+              )}
+            </div>
           </div>
         </div>
       </header>
@@ -68,41 +258,41 @@ export const WeatherChat = () => {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 w-full max-w-md">
                   <Button
                     variant="outline"
-                    onClick={() => sendMessage("What's the weather in London?")}
+                    onClick={() => sendMessage("What's the weather in Mumbai?")}
                     className="justify-start text-left h-auto py-3 px-4"
                   >
                     <div>
-                      <div className="font-medium">London Weather</div>
+                      <div className="font-medium">Mumbai Weather</div>
                       <div className="text-xs text-muted-foreground">Current conditions</div>
                     </div>
                   </Button>
                   <Button
                     variant="outline"
-                    onClick={() => sendMessage("Will it rain tomorrow in New York?")}
+                    onClick={() => sendMessage("Will it rain tomorrow in Delhi?")}
                     className="justify-start text-left h-auto py-3 px-4"
                   >
                     <div>
-                      <div className="font-medium">Rain Forecast</div>
+                      <div className="font-medium">Rain Forecast (Delhi)</div>
                       <div className="text-xs text-muted-foreground">Tomorrow's weather</div>
                     </div>
                   </Button>
                   <Button
                     variant="outline"
-                    onClick={() => sendMessage("Weather forecast for Paris next week")}
+                    onClick={() => sendMessage("Weather forecast for Bengaluru next week")}
                     className="justify-start text-left h-auto py-3 px-4"
                   >
                     <div>
-                      <div className="font-medium">Weekly Forecast</div>
+                      <div className="font-medium">Weekly Forecast (Bengaluru)</div>
                       <div className="text-xs text-muted-foreground">7-day outlook</div>
                     </div>
                   </Button>
                   <Button
                     variant="outline"
-                    onClick={() => sendMessage("What's the temperature in Tokyo right now?")}
+                    onClick={() => sendMessage("What's the temperature in Kolkata right now?")}
                     className="justify-start text-left h-auto py-3 px-4"
                   >
                     <div>
-                      <div className="font-medium">Current Temperature</div>
+                      <div className="font-medium">Current Temperature (Kolkata)</div>
                       <div className="text-xs text-muted-foreground">Real-time data</div>
                     </div>
                   </Button>
