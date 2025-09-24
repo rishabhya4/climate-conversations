@@ -2,41 +2,76 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
-All colors MUST be HSL.
-*/
+/* Weather Agent Chat Interface Design System */
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
-
+    /* Sky-themed background gradients */
+    --background: 210 100% 98%;
+    --background-secondary: 220 60% 96%;
+    --foreground: 220 39% 11%;
+    
+    /* Chat interface colors */
+    --chat-bg: 210 100% 97%;
+    --chat-header: 220 100% 95%;
+    
+    /* Message bubbles */
+    --message-user: 213 93% 67%;
+    --message-user-foreground: 0 0% 100%;
+    --message-agent: 0 0% 100%;
+    --message-agent-foreground: 220 39% 11%;
+    --message-agent-border: 220 13% 91%;
+    
+    /* Card and surface colors */
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
-
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
-
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
-
-    --radius: 0.5rem;
+    --card-foreground: 220 39% 11%;
+    
+    /* Input and interactive elements */
+    --input: 220 13% 91%;
+    --input-foreground: 220 39% 11%;
+    --input-focus: 213 93% 67%;
+    
+    /* Weather-themed accent colors */
+    --primary: 213 93% 67%;
+    --primary-foreground: 0 0% 100%;
+    --primary-hover: 213 93% 60%;
+    
+    --secondary: 220 14.3% 95.9%;
+    --secondary-foreground: 220 9.1% 46.1%;
+    --secondary-hover: 220 14.3% 92%;
+    
+    /* Status colors */
+    --success: 142 76% 36%;
+    --success-foreground: 0 0% 100%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 100%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    
+    /* Neutral tones */
+    --muted: 220 14.3% 95.9%;
+    --muted-foreground: 220 9.1% 46.1%;
+    --border: 220 13% 91%;
+    --ring: 213 93% 67%;
+    
+    /* Loading and animation colors */
+    --loading: 220 14.3% 95.9%;
+    --loading-shimmer: 0 0% 100%;
+    
+    /* Gradients */
+    --gradient-sky: linear-gradient(135deg, hsl(213, 93%, 67%) 0%, hsl(220, 100%, 95%) 100%);
+    --gradient-message: linear-gradient(135deg, hsl(213, 93%, 67%) 0%, hsl(213, 93%, 60%) 100%);
+    --gradient-bg: linear-gradient(180deg, hsl(210, 100%, 98%) 0%, hsl(220, 60%, 96%) 100%);
+    
+    /* Shadows */
+    --shadow-message: 0 2px 12px hsl(220, 13%, 91%);
+    --shadow-input: 0 2px 8px hsl(220, 13%, 91%);
+    --shadow-header: 0 2px 16px hsl(220, 13%, 91%);
+    
+    /* Spacing and sizing */
+    --radius: 0.75rem;
+    --radius-lg: 1rem;
+    --radius-message: 1.125rem;
 
     --sidebar-background: 0 0% 98%;
 
@@ -56,41 +91,51 @@ All colors MUST be HSL.
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    /* Dark theme for weather chat */
+    --background: 220 27% 8%;
+    --background-secondary: 220 27% 12%;
+    --foreground: 220 9% 88%;
+    
+    --chat-bg: 220 27% 10%;
+    --chat-header: 220 27% 14%;
+    
+    --message-user: 213 93% 67%;
+    --message-user-foreground: 0 0% 100%;
+    --message-agent: 220 27% 14%;
+    --message-agent-foreground: 220 9% 88%;
+    --message-agent-border: 220 27% 20%;
+    
+    --card: 220 27% 12%;
+    --card-foreground: 220 9% 88%;
+    
+    --input: 220 27% 20%;
+    --input-foreground: 220 9% 88%;
+    --input-focus: 213 93% 67%;
+    
+    --primary: 213 93% 67%;
+    --primary-foreground: 0 0% 100%;
+    --primary-hover: 213 93% 60%;
+    
+    --secondary: 220 27% 20%;
+    --secondary-foreground: 220 9% 88%;
+    --secondary-hover: 220 27% 24%;
+    
+    --muted: 220 27% 20%;
+    --muted-foreground: 220 9% 65%;
+    --border: 220 27% 20%;
+    --ring: 213 93% 67%;
+    
+    --loading: 220 27% 20%;
+    --loading-shimmer: 220 27% 24%;
+    
+    /* Update gradients for dark theme */
+    --gradient-sky: linear-gradient(135deg, hsl(213, 93%, 67%) 0%, hsl(220, 27%, 20%) 100%);
+    --gradient-message: linear-gradient(135deg, hsl(213, 93%, 67%) 0%, hsl(213, 93%, 60%) 100%);
+    --gradient-bg: linear-gradient(180deg, hsl(220, 27%, 8%) 0%, hsl(220, 27%, 12%) 100%);
+    
+    --shadow-message: 0 2px 12px hsl(220, 27%, 4%);
+    --shadow-input: 0 2px 8px hsl(220, 27%, 4%);
+    --shadow-header: 0 2px 16px hsl(220, 27%, 4%);
   }
 }
 
@@ -101,5 +146,44 @@ All colors MUST be HSL.
 
   body {
     @apply bg-background text-foreground;
+    background: var(--gradient-bg);
+    min-height: 100vh;
+  }
+}
+
+@layer components {
+  /* Chat-specific animations */
+  .message-enter {
+    animation: messageSlideIn 0.3s ease-out;
+  }
+  
+  .typing-indicator {
+    animation: typingPulse 1.4s infinite ease-in-out;
+  }
+  
+  .loading-shimmer {
+    animation: shimmer 1.5s infinite linear;
+  }
+}
+
+@layer utilities {
+  .gradient-sky {
+    background: var(--gradient-sky);
+  }
+  
+  .gradient-message {
+    background: var(--gradient-message);
+  }
+  
+  .shadow-message {
+    box-shadow: var(--shadow-message);
+  }
+  
+  .shadow-input {
+    box-shadow: var(--shadow-input);
+  }
+  
+  .shadow-header {
+    box-shadow: var(--shadow-header);
   }
 }
