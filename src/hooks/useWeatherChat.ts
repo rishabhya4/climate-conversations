@@ -4,6 +4,54 @@
 import { useState, useCallback, useEffect } from 'react';
 import { Message, ChatState } from '@/types/chat';
 
+// Heuristic check to ensure queries are weather/climate-related.
+const isWeatherRelated = (text: string): boolean => {
+  const t = text.toLowerCase();
+  const keywords = [
+    'weather', 'climate', 'forecast', 'temperature', 'temp', 'rain', 'rainfall', 'precip', 'precipitation',
+    'humidity', 'wind', 'snow', 'storm', 'thunder', 'uv', 'uv index', 'sunrise', 'sunset', 'aqi', 'air quality',
+    'visibility', 'pressure', 'barometric', 'dew point', 'heat index', 'feels like', 'meteorology', 'cyclone',
+    'hurricane', 'typhoon', 'flood', 'drought', 'monsoon', 'smog', 'hail', 'lightning', 'gust', 'breeze',
+    'cloud', 'cloudy', 'clear sky', 'overcast', 'drizzle', 'blizzard', 'fog', 'mist', 'sleet',
+    'weekly', 'week', '7-day', '7 day', 'today', 'tomorrow', 'hourly', 'daily', 'now', 'real-time', 'realtime'
+  ];
+  return keywords.some(k => t.includes(k));
+};
+
+// Allow brief continuations that rely on prior context
+const isAffirmationOrContinuation = (text: string): boolean => {
+  const t = text.trim().toLowerCase();
+  if (!t) return false;
+  const okPhrases = [
+    'yes', 'yeah', 'yup', 'sure', 'okay', 'ok', 'pls', 'please', 'go ahead', 'do it', 'all', 'both',
+    'everything', 'all details', 'all info', 'give me all details',
+    'current', 'now', 'today', 'tomorrow', 'next week', 'weekly', 'hourly', 'daily', 'go on', 'continue',
+    'proceed', 'fine', 'alright', 'right', 'correct'
+  ];
+  return okPhrases.includes(t) || okPhrases.some(p => t === p || t.startsWith(p + ' '));
+};
+
+// Topic decision that considers recent chat context
+const isOnTopic = (text: string, history: Message[]): boolean => {
+  if (isWeatherRelated(text)) return true;
+  if (isAffirmationOrContinuation(text)) {
+    // Look back a few turns for any weather-related user message or assistant content
+    const recent = history.slice(-6); // last ~3 exchanges
+    const hasWeatherContext = recent.some(m => isWeatherRelated(m.content));
+    return hasWeatherContext;
+  }
+  return false;
+};
+
+// Detect if the user likely wants a forecast (esp. hourly/7-day) so we can nudge formatting
+const needsHourlyForecastFormat = (text: string): boolean => {
+  const t = text.toLowerCase();
+  const cues = [
+    'forecast', 'hourly', '7-day', '7 day', 'next week', 'tomorrow', 'will it rain', 'rain tomorrow', 'weekly', 'daily'
+  ];
+  return cues.some(c => t.includes(c));
+};
+
 const getDefaultThreadId = (): number | string => {
   const threadIdEnv = (import.meta as any).env?.VITE_THREAD_ID;
   return threadIdEnv && threadIdEnv.toString().trim().length > 0 ? threadIdEnv : 2;
@@ -52,6 +100,24 @@ export const useWeatherChat = (threadIdParam?: number | string) => {
       timestamp: new Date(),
     };
 
+    // Guardrail: if off-topic, refuse locally without calling the API.
+    if (!isOnTopic(userMessage.content, chatState.messages)) {
+      const refusal: Message = {
+        id: `assistant-${Date.now()}`,
+        role: 'assistant',
+        content:
+          'I can only help with climate and weather-related questions. Please ask about weather conditions, forecasts, temperatures, air quality, wind, humidity, or similar topics.',
+        timestamp: new Date(),
+      };
+      setChatState(prev => ({
+        ...prev,
+        messages: [...prev.messages, userMessage, refusal],
+        isLoading: false,
+        error: null,
+      }));
+      return;
+    }
+
     // Add user message immediately
     setChatState(prev => ({
       ...prev,
@@ -64,12 +130,22 @@ export const useWeatherChat = (threadIdParam?: number | string) => {
       // Prepare streaming request to Mastra Weather Agent
       const endpoint = 'https://millions-screeching-vultur.mastra.cloud/api/agents/weatherAgent/stream';
 
-      // use current threadId
+      // Hidden instruction to keep the backend agent on-topic (not shown in UI)
+      const guardrailInstruction =
+        'You are a helpful Weather and Climate assistant. Only answer questions related to weather and climate: current conditions, forecasts, temperatures, precipitation, wind, humidity, visibility, pressure, UV, air quality, etc. If the user asks about anything unrelated, politely refuse and steer them back to a weather-related topic. For valid weather questions, always provide the best answer you can. If key details like location or timeframe are missing, ask a concise clarifying question (e.g., "Which city and for what dates?") rather than refusing.';
 
-      const messagesPayload = [...chatState.messages, userMessage].map(m => ({
+      const basePayload = [...chatState.messages, userMessage].map(m => ({
         role: m.role,
         content: m.content,
       }));
+
+      const formattingInstruction = `When the user asks about forecasts (hourly, tomorrow, weekly, 7-day), reply as a clean hourly list without extra explanations. For each hour, include: Time (e.g., 12 am, 1 am), Temperature with unit, and a concise condition (Clear, Cloudy, Rain, etc.). Example format: \n12 am    83°    Clear\n1 am     82°    Clear`;
+
+      const messagesPayload = [
+        { role: 'user', content: guardrailInstruction },
+        ...(needsHourlyForecastFormat(userMessage.content) ? [{ role: 'user', content: formattingInstruction }] : []),
+        ...basePayload,
+      ];
 
       const requestBody = {
         messages: messagesPayload,
